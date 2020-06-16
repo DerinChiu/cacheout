@@ -13,6 +13,7 @@ import inspect
 import re
 from threading import RLock
 import time
+import queue
 
 try:
     from re import Pattern
@@ -52,7 +53,7 @@ class Cache(object):
             and its return value will be set for that cache key.
     """
 
-    def __init__(self, maxsize=None, ttl=None, timer=None, default=None):
+    def __init__(self, maxsize=None, ttl=None, timer=None, default=None, q=None):
         if maxsize is None:
             maxsize = 256
 
@@ -63,14 +64,14 @@ class Cache(object):
             timer = time.time
 
         self.setup()
-        self.configure(maxsize=maxsize, ttl=ttl, timer=timer, default=default)
+        self.configure(maxsize=maxsize, ttl=ttl, timer=timer, default=default, q=q)
 
     def setup(self):
         self._cache = OrderedDict()
         self._expire_times = {}
         self._lock = RLock()
 
-    def configure(self, maxsize=None, ttl=None, timer=None, default=None):
+    def configure(self, maxsize=None, ttl=None, timer=None, default=None, q=None):
         """
         Configure cache settings. This method is meant to support runtime level
         configurations for global level cache objects.
@@ -98,6 +99,12 @@ class Cache(object):
                 raise TypeError("timer must be a callable")
 
             self.timer = timer
+
+        if q is not None:
+            if not isinstance(q, queue.Queue):
+                raise TypeError("q must be a queue.Queue")
+
+            self._queue = q
 
         self.default = default
 
@@ -320,7 +327,7 @@ class Cache(object):
         if key not in self:
             self.evict()
 
-        self._delete(key)
+        self._delete(key, True)
         self._cache[key] = value
 
         if ttl and ttl > 0:
@@ -346,10 +353,12 @@ class Cache(object):
         with self._lock:
             return self._delete(key)
 
-    def _delete(self, key):
+    def _delete(self, key, first=False):
         count = 0
 
         try:
+            if not first:
+                self._queue.put(self._cache[key])
             del self._cache[key]
             count = 1
         except KeyError:

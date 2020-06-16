@@ -45,8 +45,8 @@ class LFUCache(Cache):
         super()._set(key, value, ttl=ttl)
         self._touch(key)
 
-    def _delete(self, key):
-        count = super()._delete(key)
+    def _delete(self, key, first=False):
+        count = super()._delete(key, first)
 
         try:
             del self._access_counts[key]

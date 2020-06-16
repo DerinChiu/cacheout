@@ -6,6 +6,8 @@ cacheout
 
 A caching library for Python.
 
+Added a queue to receive evicted entries.
+
 
 Links
 =====
